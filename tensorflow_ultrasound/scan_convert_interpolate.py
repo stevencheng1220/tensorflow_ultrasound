@@ -43,7 +43,7 @@ def scan_convert_interpolate_precompute(image, y_seg, x_seg, irad, frad, iang, f
     horizontal_pad = tf.cast(tf.round(tf.math.subtract(a1, a2)), tf.int32)
     vertical_pad = tf.cast(tf.round(irad), tf.int32)
     res_height = image_height + vertical_pad
-    res_width = image_width + 2 * horizontal_p2ad
+    res_width = image_width + 2 * horizontal_pad
 
     empty_res_image = tf.zeros([res_height+1, res_width+1], tf.float32)
 
