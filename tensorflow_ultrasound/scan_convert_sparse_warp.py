@@ -1,3 +1,6 @@
+import tensorflow as tf
+import tensorflow_addons as tfa
+
 
 # New Scan Convert function
 def scan_convert_with_sparse_warp(image, ele, y_seg=17, x_seg=5):

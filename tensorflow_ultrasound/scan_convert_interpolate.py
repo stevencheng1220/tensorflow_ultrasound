@@ -1,4 +1,4 @@
-from config import *
+import tensorflow as tf
 
 @tf.function
 def scan_convert_precompute(image, ele, y_seg, x_seg):

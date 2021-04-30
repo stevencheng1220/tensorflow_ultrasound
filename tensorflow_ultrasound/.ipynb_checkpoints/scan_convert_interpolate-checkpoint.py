@@ -1,4 +1,4 @@
-from config import *
+import tensorflow as tf
 
 @tf.function
 def scan_convert_precompute(image, ele, y_seg, x_seg):
@@ -205,3 +205,4 @@ def scan_convert_dynamic(image, empty_res_image, ele, points_xy, val_rtheta, val
     res = tf.tensor_scatter_nd_add(empty_res_image, points_xy, points_val)
 
     return res[tf.cast(ele['initial_radius'], tf.int32):, :]
+
