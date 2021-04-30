@@ -1,10 +1,35 @@
+
+
+
 import tensorflow as tf
 
 @tf.function
 def scan_convert_interpolate_precompute(image, y_seg, x_seg, irad, frad, iang, fang):
+
     '''
-    Step 0: Initialize variables for use
+    This function is the first part of the scan conversion process in ultrasound imaging, wherein an ultrasound
+    slice is bilinearly interpolated to generate a resultant fan out shape.
+
+    This precomputation step is required to generate the static weights and grid coordinates based on the input image's
+    dimensions for bilinear interpolation.
+
+    Args:
+        image (tf.tensor, tf.float32): A given ultrasound image for interpolation
+        y_seg (int): The number of grid points generate in the y direction, in normal scenarios this should be equal to image.shape[0]
+        x_seg (int): The number of grid points generated in the x direction, in normal scenarios this should be equal to image.shape[1]
+        irad (tf.float32): The initial radius is inner limit of the resultant fan out
+        frad (tf.float32): The final radius is the outer limit of the resultant fan out
+        iang (tf.float32): The initial angle of the resultant fan out curvature (a negative number)
+        fang (tf.float32): The final angle of the resultant fan out curvature (a positive number)
+
+    Returns:
+        empty_res_image (tf.float32): An empty array with dimensions of image.shape
+        points_xy (tf.int32): The grid points for bilinear interpolation in the x-y coordinate space
+        val_rtheta (tf.int32): The array coordinates (in the r-theta space) of each bilinear interpolation points
+            (4 in total for each resultant pixel)
+        val_weights (tf.float32): The weights of the bilinear interpolation points (4 in total for each resultant pixel)
     '''
+
     ### Initialize dimension and shift variables ###
     image_dim = tf.shape(image) # Image dimensions [height, width]
     image_height, image_width = tf.gather(image_dim, 0), tf.gather(image_dim, 1)
@@ -12,15 +37,16 @@ def scan_convert_interpolate_precompute(image, y_seg, x_seg, irad, frad, iang, f
     horizontal_shift = tf.round(tf.math.multiply(-1.0, tf.cast(tf.math.divide(image_width, 2), tf.float32)))
     vertical_shift = tf.round(irad)
 
-    ### Initialize dimensions for result image and create zerod tensor ### 
+    ### Initialize dimensions for result image and create zeroed tensor ###
     a1 = tf.math.multiply(frad, tf.sin(fang))
     a2 = tf.cast(tf.math.divide(image_width, 2), tf.float32)
     horizontal_pad = tf.cast(tf.round(tf.math.subtract(a1, a2)), tf.int32)
     vertical_pad = tf.cast(tf.round(irad), tf.int32)
     res_height = image_height + vertical_pad
-    res_width = image_width + 2 * horizontal_pad
+    res_width = image_width + 2 * horizontal_p2ad
 
     empty_res_image = tf.zeros([res_height+1, res_width+1], tf.float32)
+
 
 
     '''
@@ -32,7 +58,6 @@ def scan_convert_interpolate_precompute(image, y_seg, x_seg, irad, frad, iang, f
     grid_x_rtheta = tf.cast(tf.linspace(0, image_width, x_seg+1), tf.float32) + horizontal_shift
     grid_x_rtheta, grid_y_rtheta = tf.meshgrid(grid_x_rtheta, grid_y_rtheta)
     grid_y_rtheta, grid_x_rtheta = tf.reshape(grid_y_rtheta, [-1]), tf.reshape(grid_x_rtheta, [-1])
-    grid_vals_rtheta = tf.gather(image, tf.cast(tf.stack([grid_y_rtheta,grid_x_rtheta], axis=-1), tf.int32))
 
     ### Initialize grid points (x, y) in x-y space ###
     angles = tf.math.divide(
@@ -156,6 +181,7 @@ def scan_convert_interpolate_precompute(image, y_seg, x_seg, irad, frad, iang, f
     val3_rtheta = tf.stack([tf.gather(grid_y_rtheta_shifted, points_y_ceil), tf.gather(grid_x_rtheta_shifted, points_x_ceil)], axis=-1)
     val4_rtheta = tf.stack([tf.gather(grid_y_rtheta_shifted, points_y_ceil), tf.gather(grid_x_rtheta_shifted, points_x_floor)], axis=-1)
     val_rtheta = tf.stack([val1_rtheta, val2_rtheta, val3_rtheta, val4_rtheta], axis=-1)
+    val_rtheta = tf.cast(val_rtheta, tf.int32)
 
     return empty_res_image, points_xy, val_rtheta, val_weights
   
@@ -165,6 +191,27 @@ def scan_convert_interpolate_precompute(image, y_seg, x_seg, irad, frad, iang, f
 
 @tf.function
 def scan_convert_interpolate_dynamic(image, empty_res_image, irad, points_xy, val_rtheta, val_weights):
+    '''
+    This function is the second part of the scan conversion process in ultrasound imaging, wherein an ultrasound
+    slice is bilinearly interpolated to generate a resultant fan out shape.
+
+    This dynamic step is performs the bilinear interpolation from the static weights and grid coordinates from the
+    previous call 'scan_convert_interpolate_precompute'.
+
+    Args:
+        image (tf.tensor, tf.float32): A given ultrasound image for interpolation
+        empty_res_image (tf.float32): An empty array with dimensions of image.shape
+        irad (tf.float32): The initial radius is inner limit of the resultant fan out
+        points_xy (tf.int32): The grid points for bilinear interpolation in the x-y coordinate space
+        val_rtheta (tf.int32): The array coordinates (in the r-theta space) of each bilinear interpolation points
+            (4 in total for each resultant pixel)
+        val_weights (tf.float32): The weights of the bilinear interpolation points (4 in total for each resultant pixel)
+
+    Returns:
+        res (tf.tensor, tf.float32): The resultant ultrasound image bilinearly interpolated to generate a fan out.
+    '''
+
+
     '''
     Step 5: Dynamically find pixel values for all four bilinear point for each of interest in r-theta plane
     '''
@@ -203,6 +250,7 @@ def scan_convert_interpolate_dynamic(image, empty_res_image, irad, points_xy, va
     '''
     ### Populate zerod tensor with values ###
     res = tf.tensor_scatter_nd_add(empty_res_image, points_xy, points_val)
+    res = res[tf.cast(irad, tf.int32):, :]
 
-    return res[tf.cast(irad, tf.int32):, :]
+    return res
 
