@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 @tf.function
-def scan_convert_precompute(image, ele, y_seg, x_seg):
+def scan_convert_interpolate_precompute(image, y_seg, x_seg, irad, frad, iang, fang):
     '''
     Step 0: Initialize variables for use
     '''
@@ -10,13 +10,13 @@ def scan_convert_precompute(image, ele, y_seg, x_seg):
     image_height, image_width = tf.gather(image_dim, 0), tf.gather(image_dim, 1)
 
     horizontal_shift = tf.round(tf.math.multiply(-1.0, tf.cast(tf.math.divide(image_width, 2), tf.float32)))
-    vertical_shift = tf.round(ele['initial_radius'])
+    vertical_shift = tf.round(irad)
 
     ### Initialize dimensions for result image and create zerod tensor ### 
-    a1 = tf.math.multiply(ele['final_radius'], tf.sin(ele['final_angle']))
+    a1 = tf.math.multiply(frad, tf.sin(fang))
     a2 = tf.cast(tf.math.divide(image_width, 2), tf.float32)
     horizontal_pad = tf.cast(tf.round(tf.math.subtract(a1, a2)), tf.int32)
-    vertical_pad = tf.cast(tf.round(ele['initial_radius']), tf.int32)
+    vertical_pad = tf.cast(tf.round(irad), tf.int32)
     res_height = image_height + vertical_pad
     res_width = image_width + 2 * horizontal_pad
 
@@ -40,7 +40,7 @@ def scan_convert_precompute(image, ele, y_seg, x_seg):
         tf.math.subtract(tf.reduce_max(grid_x_rtheta), tf.reduce_min(grid_x_rtheta))
         )
     angles = tf.math.subtract(tf.math.multiply(2.0, angles), 1)
-    angles = tf.math.multiply(angles, (ele['final_angle']))
+    angles = tf.math.multiply(angles, (fang))
     radius = grid_y_rtheta
 
     grid_y_xy = tf.multiply(radius, tf.cos(angles))
@@ -64,10 +64,10 @@ def scan_convert_precompute(image, ele, y_seg, x_seg):
 
     ### Mask for points of interest in x-y space ###
     dist_from_center = tf.sqrt(tf.square(points_y_xy) + tf.square(points_x_xy))
-    points_radial_mask = tf.math.logical_and(dist_from_center > ele['initial_radius'], dist_from_center < ele['final_radius'])
+    points_radial_mask = tf.math.logical_and(dist_from_center > irad, dist_from_center < frad)
 
-    angle_limit1 = tf.cast(tf.math.multiply(points_x_xy, tf.math.divide(1.0, ele['initial_angle'])), tf.float32)
-    angle_limit2 = tf.cast(tf.math.multiply(points_x_xy, tf.math.divide(1.0, ele['final_angle'])), tf.float32)
+    angle_limit1 = tf.cast(tf.math.multiply(points_x_xy, tf.math.divide(1.0, iang)), tf.float32)
+    angle_limit2 = tf.cast(tf.math.multiply(points_x_xy, tf.math.divide(1.0, fang)), tf.float32)
     points_angle_mask = tf.math.logical_and(angle_limit1 < points_y_xy, angle_limit2 < points_y_xy)
 
     points_mask = tf.math.logical_and(points_radial_mask, points_angle_mask)
@@ -93,7 +93,7 @@ def scan_convert_precompute(image, ele, y_seg, x_seg):
                     tf.math.subtract(tf.reduce_max(angles), tf.reduce_min(angles))
                 )
     x_scale = tf.math.subtract(tf.math.multiply(2.0, x_scale), 1)
-    scale = tf.cast(tf.math.divide(tf.gather(tf.shape(ele['dtce']), [1]), 2), tf.float32)
+    scale = tf.cast(tf.math.divide(tf.gather(tf.shape(image), [1]), 2), tf.float32)
     points_x_rtheta_masked = (scale - (-1 * scale)) * tf.math.divide(
                                 tf.math.subtract(x_scale, tf.reduce_min(x_scale)), 
                                 tf.math.subtract(tf.reduce_max(x_scale), tf.reduce_min(x_scale))
@@ -164,7 +164,7 @@ def scan_convert_precompute(image, ele, y_seg, x_seg):
 
 
 @tf.function
-def scan_convert_dynamic(image, empty_res_image, ele, points_xy, val_rtheta, val_weights):
+def scan_convert_interpolate_dynamic(image, empty_res_image, irad, points_xy, val_rtheta, val_weights):
     '''
     Step 5: Dynamically find pixel values for all four bilinear point for each of interest in r-theta plane
     '''
@@ -204,5 +204,5 @@ def scan_convert_dynamic(image, empty_res_image, ele, points_xy, val_rtheta, val
     ### Populate zerod tensor with values ###
     res = tf.tensor_scatter_nd_add(empty_res_image, points_xy, points_val)
 
-    return res[tf.cast(ele['initial_radius'], tf.int32):, :]
+    return res[tf.cast(irad, tf.int32):, :]
 

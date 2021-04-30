@@ -2,3 +2,4 @@ tensorflow_ultrasound.egg-info
 __pycache__
 .ipynb_checkpoints
 .DS_Store
+scan_convert_sparse_warp.py
